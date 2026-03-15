@@ -6,13 +6,10 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      # Passe diese Pfade an deine Synology-Ordner an:
       - /volume1/Scan/scan-eingang:/data/input
       - /volume1/Scan/scan-ausgang:/data/output
+      - /volume1/Scan/scan-pending:/data/pending
     environment:
-      - PROMINENCE=46
+      - PROMINENCE=20
       - PADDING=0
       - ROTATION=0
-    # Optional: auf bestimmte CPU-Kerne begrenzen
-    # cpus: "1.0"
-    # mem_limit: 512m
