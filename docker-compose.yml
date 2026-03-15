@@ -1,6 +1,6 @@
 services:
   foto-splitter:
-    image: foto-splitter:latest
+    image: ghcr.io/dernassesmart/foto-splitter:latest
     container_name: foto-splitter
     restart: unless-stopped
     ports:
