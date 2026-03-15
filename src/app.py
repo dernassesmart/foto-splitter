@@ -198,9 +198,24 @@ main{max-width:1060px;margin:1.5rem auto;padding:0 1.25rem;display:flex;flex-dir
 .lr.done{border-color:#4caf50}.lr.error{border-color:#f44336;background:#fef2f2}
 .lr.warning{border-color:#ff9800}.lr.start{border-color:#2196f3}.lr.preview{border-color:#9c27b0}
 .lt{color:#bbb;flex-shrink:0}.lf{font-weight:500}.lm{color:#666}
-#lb{display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:999;align-items:center;justify-content:center;cursor:zoom-out}
-#lb.on{display:flex}
-#lb img{max-width:92vw;max-height:92vh;object-fit:contain;border-radius:4px}
+/* Crop editor modal */
+#ce{display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:999;flex-direction:column;align-items:center;justify-content:center;gap:12px}
+#ce.on{display:flex}
+#ce-title{color:#fff;font-size:13px;opacity:.7}
+#ce-wrap{position:relative;display:inline-block;cursor:crosshair;user-select:none}
+#ce-img{display:block;max-width:88vw;max-height:76vh;object-fit:contain}
+#ce-sel{position:absolute;border:2px solid #fff;background:rgba(255,255,255,.12);pointer-events:none;display:none}
+.ce-handle{position:absolute;width:10px;height:10px;background:#fff;border:2px solid #333;border-radius:2px}
+.ce-handle.tl{top:-5px;left:-5px;cursor:nwse-resize}
+.ce-handle.tr{top:-5px;right:-5px;cursor:nesw-resize}
+.ce-handle.bl{bottom:-5px;left:-5px;cursor:nesw-resize}
+.ce-handle.br{bottom:-5px;right:-5px;cursor:nwse-resize}
+#ce-btns{display:flex;gap:8px}
+#ce-btns button{padding:8px 20px;border-radius:7px;border:none;font-size:13px;cursor:pointer;font-weight:500}
+#ce-apply{background:#2e7d32;color:#fff}
+#ce-reset{background:#555;color:#fff}
+#ce-close{background:#333;color:#fff}
+#ce-hint{color:#aaa;font-size:12px;text-align:center}
 @media(max-width:600px){.stats{grid-template-columns:1fr 1fr}}
 </style>
 </head>
@@ -285,7 +300,24 @@ main{max-width:1060px;margin:1.5rem auto;padding:0 1.25rem;display:flex;flex-dir
 </div>
 
 </main>
-<div id="lb" onclick="this.classList.remove('on')"><img id="lb-img" src=""></div>
+<div id="ce">
+  <div id="ce-title">Ziehe einen Rahmen zum Zuschneiden</div>
+  <div id="ce-wrap">
+    <img id="ce-img" src="" draggable="false">
+    <div id="ce-sel">
+      <div class="ce-handle tl"></div>
+      <div class="ce-handle tr"></div>
+      <div class="ce-handle bl"></div>
+      <div class="ce-handle br"></div>
+    </div>
+  </div>
+  <div id="ce-hint">Klick &amp; Ziehen = neuer Rahmen &nbsp;|&nbsp; Ecken ziehen = anpassen</div>
+  <div id="ce-btns">
+    <button id="ce-apply" onclick="cropApply()">✓ Zuschnitt übernehmen</button>
+    <button id="ce-reset" onclick="cropReset()">↺ Zurücksetzen</button>
+    <button id="ce-close" onclick="cropClose()">✕ Schließen</button>
+  </div>
+</div>
 
 <script>
 let items = {};
@@ -416,9 +448,163 @@ function renderPreview() {
 function toggle(key) { items[key].selected = !items[key].selected; renderPreview(); }
 function removeItem(key) { delete items[key]; renderPreview(); }
 function selAll(v) { Object.values(items).forEach(i => i.selected = v); renderPreview(); }
+// ── Crop Editor ──────────────────────────────────────────────────────────────
+let _ceKey = null;
+let _ceSel = {x:0,y:0,w:0,h:0};  // in image-natural coords
+let _ceDrag = null;  // {type:'new'|'tl'|'tr'|'bl'|'br', startX, startY, origSel}
+
 function openLb(key) {
-  document.getElementById('lb-img').src = items[key].b64;
-  document.getElementById('lb').classList.add('on');
+  _ceKey = key;
+  const img = document.getElementById('ce-img');
+  img.src = items[key].b64;
+  img.onload = () => {
+    cropReset();
+    document.getElementById('ce').classList.add('on');
+  };
+}
+
+function cropClose() {
+  document.getElementById('ce').classList.remove('on');
+  _ceKey = null; _ceDrag = null;
+}
+
+function cropReset() {
+  const img = document.getElementById('ce-img');
+  _ceSel = {x:0, y:0, w:img.naturalWidth, h:img.naturalHeight};
+  document.getElementById('ce-sel').style.display = 'none';
+}
+
+function imgRect() {
+  return document.getElementById('ce-img').getBoundingClientRect();
+}
+
+function displayToNatural(dx, dy) {
+  const img = document.getElementById('ce-img');
+  const r = imgRect();
+  const scaleX = img.naturalWidth  / r.width;
+  const scaleY = img.naturalHeight / r.height;
+  return {x: dx * scaleX, y: dy * scaleY, scaleX, scaleY};
+}
+
+function updateSelDisplay() {
+  const img = document.getElementById('ce-img');
+  const r = imgRect();
+  const scaleX = r.width  / img.naturalWidth;
+  const scaleY = r.height / img.naturalHeight;
+  const wrap = document.getElementById('ce-wrap');
+  const wRect = wrap.getBoundingClientRect();
+  const sel = document.getElementById('ce-sel');
+  const x = (_ceSel.x * scaleX) + (r.left - wRect.left);
+  const y = (_ceSel.y * scaleY) + (r.top  - wRect.top);
+  const w = _ceSel.w * scaleX;
+  const h = _ceSel.h * scaleY;
+  sel.style.display = 'block';
+  sel.style.left = x + 'px';
+  sel.style.top  = y + 'px';
+  sel.style.width  = w + 'px';
+  sel.style.height = h + 'px';
+  document.getElementById('ce-title').textContent =
+    `Auswahl: ${Math.round(_ceSel.w)}×${Math.round(_ceSel.h)}px`;
+}
+
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+const ceWrap = document.getElementById('ce-wrap');
+
+ceWrap.addEventListener('mousedown', e => {
+  e.preventDefault();
+  const img = document.getElementById('ce-img');
+  const r = imgRect();
+  const wRect = ceWrap.getBoundingClientRect();
+  // Check if clicking a handle
+  const sel = document.getElementById('ce-sel');
+  const handles = sel.querySelectorAll('.ce-handle');
+  for (const h of handles) {
+    const hr = h.getBoundingClientRect();
+    if (e.clientX >= hr.left-4 && e.clientX <= hr.right+4 &&
+        e.clientY >= hr.top-4  && e.clientY <= hr.bottom+4) {
+      const type = [...h.classList].find(c => ['tl','tr','bl','br'].includes(c));
+      _ceDrag = {type, startX: e.clientX, startY: e.clientY, origSel: {..._ceSel}};
+      return;
+    }
+  }
+  // New selection: coords relative to image
+  const ix = e.clientX - r.left;
+  const iy = e.clientY - r.top;
+  if (ix < 0 || iy < 0 || ix > r.width || iy > r.height) return;
+  const {x, y} = displayToNatural(ix, iy);
+  _ceSel = {x, y, w:0, h:0};
+  _ceDrag = {type:'new', startX: e.clientX, startY: e.clientY, origSel:{x,y,w:0,h:0}};
+  updateSelDisplay();
+});
+
+document.addEventListener('mousemove', e => {
+  if (!_ceDrag) return;
+  const img = document.getElementById('ce-img');
+  const r = imgRect();
+  const NW = img.naturalWidth, NH = img.naturalHeight;
+  const {scaleX, scaleY} = displayToNatural(1,1);
+  const dx = (e.clientX - _ceDrag.startX) * scaleX;
+  const dy = (e.clientY - _ceDrag.startY) * scaleY;
+  const o = _ceDrag.origSel;
+
+  if (_ceDrag.type === 'new') {
+    const x0 = clamp(o.x, 0, NW);
+    const y0 = clamp(o.y, 0, NH);
+    const x1 = clamp(o.x + dx, 0, NW);
+    const y1 = clamp(o.y + dy, 0, NH);
+    _ceSel = {x: Math.min(x0,x1), y: Math.min(y0,y1), w: Math.abs(x1-x0), h: Math.abs(y1-y0)};
+  } else if (_ceDrag.type === 'br') {
+    _ceSel = {x:o.x, y:o.y, w:clamp(o.w+dx,10,NW-o.x), h:clamp(o.h+dy,10,NH-o.y)};
+  } else if (_ceDrag.type === 'tl') {
+    const nx = clamp(o.x+dx,0,o.x+o.w-10);
+    const ny = clamp(o.y+dy,0,o.y+o.h-10);
+    _ceSel = {x:nx, y:ny, w:o.w-(nx-o.x), h:o.h-(ny-o.y)};
+  } else if (_ceDrag.type === 'tr') {
+    const ny = clamp(o.y+dy,0,o.y+o.h-10);
+    _ceSel = {x:o.x, y:ny, w:clamp(o.w+dx,10,NW-o.x), h:o.h-(ny-o.y)};
+  } else if (_ceDrag.type === 'bl') {
+    const nx = clamp(o.x+dx,0,o.x+o.w-10);
+    _ceSel = {x:nx, y:o.y, w:o.w-(nx-o.x), h:clamp(o.h+dy,10,NH-o.y)};
+  }
+  updateSelDisplay();
+});
+
+document.addEventListener('mouseup', () => { _ceDrag = null; });
+
+// Touch support
+ceWrap.addEventListener('touchstart', e => {
+  const t = e.touches[0];
+  ceWrap.dispatchEvent(new MouseEvent('mousedown', {clientX:t.clientX, clientY:t.clientY, bubbles:true}));
+}, {passive:false});
+document.addEventListener('touchmove', e => {
+  const t = e.touches[0];
+  document.dispatchEvent(new MouseEvent('mousemove', {clientX:t.clientX, clientY:t.clientY}));
+  e.preventDefault();
+}, {passive:false});
+document.addEventListener('touchend', () => document.dispatchEvent(new MouseEvent('mouseup')));
+
+function cropApply() {
+  if (!_ceKey) return;
+  if (_ceSel.w < 5 || _ceSel.h < 5) { cropClose(); return; }
+  // Send crop coords to server to get new b64
+  fetch('/api/crop', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      key: _ceKey,
+      x: Math.round(_ceSel.x), y: Math.round(_ceSel.y),
+      w: Math.round(_ceSel.w), h: Math.round(_ceSel.h)
+    })
+  }).then(r=>r.json()).then(d=>{
+    items[_ceKey].b64   = d.b64;
+    items[_ceKey].size  = d.size;
+    items[_ceKey].crop  = {x:Math.round(_ceSel.x), y:Math.round(_ceSel.y),
+                           w:Math.round(_ceSel.w),  h:Math.round(_ceSel.h)};
+    renderPreview();
+    cropClose();
+    log('preview', items[_ceKey].file+items[_ceKey].suffix, 'Zuschnitt gespeichert');
+  });
 }
 
 function recut() {
@@ -528,6 +714,50 @@ def api_recut():
 
     return jsonify(results)
 
+@app.route("/api/crop", methods=["POST"])
+def api_crop():
+    data = request.get_json()
+    key = data["key"]
+    x, y, w, h = int(data["x"]), int(data["y"]), int(data["w"]), int(data["h"])
+
+    with _pending_lock:
+        item = dict(_pending.get(key, {}))
+    if not item:
+        return jsonify({"error": "item not found"}), 404
+
+    src = Path(item["src_path"])
+    if not src.exists():
+        return jsonify({"error": "source file not found"}), 404
+
+    try:
+        prom = item.get("prominence", SETTINGS["prominence"])
+        pad  = item.get("padding",    SETTINGS["padding"])
+        rot  = item.get("rotation",   SETTINGS["rotation"])
+        photos = split_image(src, prom, pad, rot)
+        suffix_map = {s: img for img, s in photos}
+        base_img = suffix_map.get(item["suffix"])
+        if base_img is None:
+            return jsonify({"error": "suffix not found"}), 404
+
+        iw, ih = base_img.size
+        x = max(0, min(x, iw - 1))
+        y = max(0, min(y, ih - 1))
+        w = max(1, min(w, iw - x))
+        h = max(1, min(h, ih - y))
+        cropped = base_img.crop((x, y, x + w, y + h))
+        b64 = img_to_b64(cropped)
+
+        with _pending_lock:
+            _pending[key]["b64"]         = b64
+            _pending[key]["size"]        = list(cropped.size)
+            _pending[key]["manual_crop"] = {"x": x, "y": y, "w": w, "h": h}
+
+        return jsonify({"b64": b64, "size": list(cropped.size)})
+    except Exception as e:
+        logger.error(f"Crop {key}: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/commit", methods=["POST"])
 def api_commit():
     data = request.get_json()  # [{key, file, suffix, src_path}]
@@ -564,8 +794,18 @@ def api_commit():
             for pi in pending_items:
                 suffix = pi["suffix"]
                 if suffix in suffix_map:
+                    final_img = suffix_map[suffix]
+                    # Apply manual crop if user drew one in the editor
+                    mc = pi.get("manual_crop")
+                    if mc:
+                        iw, ih = final_img.size
+                        cx = max(0, min(mc["x"], iw-1))
+                        cy = max(0, min(mc["y"], ih-1))
+                        cw = max(1, min(mc["w"], iw-cx))
+                        ch = max(1, min(mc["h"], ih-cy))
+                        final_img = final_img.crop((cx, cy, cx+cw, cy+ch))
                     out_name = f"{pi['file']}{suffix}.jpg"
-                    suffix_map[suffix].save(OUTPUT_DIR / out_name, "JPEG", quality=95)
+                    final_img.save(OUTPUT_DIR / out_name, "JPEG", quality=95)
                     saved.append(out_name)
 
             # Remove from pending
