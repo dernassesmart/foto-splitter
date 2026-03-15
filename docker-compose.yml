@@ -7,8 +7,8 @@ services:
       - "8080:8080"
     volumes:
       # Passe diese Pfade an deine Synology-Ordner an:
-      - /volume1/scan/scan-eingang:/data/input
-      - /volume1/scan/scan-ausgang:/data/output
+      - /volume1/Scan/scan-eingang:/data/input
+      - /volume1/Scan/scan-ausgang:/data/output
     environment:
       - PROMINENCE=46
       - PADDING=0
