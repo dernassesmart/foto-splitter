@@ -456,10 +456,16 @@ let _ceDrag = null;  // {type:'new'|'tl'|'tr'|'bl'|'br', startX, startY, origSel
 function openLb(key) {
   _ceKey = key;
   const img = document.getElementById('ce-img');
-  img.src = items[key].b64;
+  document.getElementById('ce-title').textContent = 'Originalbild wird geladen…';
+  // Load full-resolution original from server
+  img.src = '/api/original/' + encodeURIComponent(key);
   img.onload = () => {
     cropReset();
     document.getElementById('ce').classList.add('on');
+  };
+  img.onerror = () => {
+    // Fallback to preview b64 if original fails
+    img.src = items[key].b64;
   };
 }
 
@@ -714,6 +720,36 @@ def api_recut():
 
     return jsonify(results)
 
+@app.route("/api/original/<key>")
+def api_original(key):
+    """Return the full-resolution crop for a pending item as JPEG (no scaling)."""
+    with _pending_lock:
+        item = dict(_pending.get(key, {}))
+    if not item:
+        return jsonify({"error": "not found"}), 404
+    src = Path(item["src_path"])
+    if not src.exists():
+        return jsonify({"error": "source not found"}), 404
+    try:
+        prom = item.get("prominence", SETTINGS["prominence"])
+        pad  = item.get("padding",    SETTINGS["padding"])
+        rot  = item.get("rotation",   SETTINGS["rotation"])
+        photos = split_image(src, prom, pad, rot)
+        suffix_map = {s: img for img, s in photos}
+        full_img = suffix_map.get(item["suffix"])
+        if full_img is None:
+            return jsonify({"error": "suffix not found"}), 404
+        buf = BytesIO()
+        full_img.save(buf, "JPEG", quality=97)
+        buf.seek(0)
+        from flask import send_file
+        return send_file(buf, mimetype="image/jpeg",
+                         download_name=f"{key}_original.jpg")
+    except Exception as e:
+        logger.error(f"Original {key}: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/crop", methods=["POST"])
 def api_crop():
     data = request.get_json()
@@ -745,7 +781,7 @@ def api_crop():
         w = max(1, min(w, iw - x))
         h = max(1, min(h, ih - y))
         cropped = base_img.crop((x, y, x + w, y + h))
-        b64 = img_to_b64(cropped)
+        b64 = img_to_b64(cropped, max_w=800)
 
         with _pending_lock:
             _pending[key]["b64"]         = b64
