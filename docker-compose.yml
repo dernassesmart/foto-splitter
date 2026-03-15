@@ -1,0 +1,18 @@
+services:
+  foto-splitter:
+    image: foto-splitter:latest
+    container_name: foto-splitter
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      # Passe diese Pfade an deine Synology-Ordner an:
+      - /volume1/photos/scan-eingang:/data/input
+      - /volume1/photos/scan-ausgang:/data/output
+    environment:
+      - PROMINENCE=46
+      - PADDING=0
+      - ROTATION=0
+    # Optional: auf bestimmte CPU-Kerne begrenzen
+    # cpus: "1.0"
+    # mem_limit: 512m
