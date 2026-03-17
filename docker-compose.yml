@@ -6,9 +6,9 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - /volume1/Scan/scan-eingang:/data/input
-      - /volume1/Scan/scan-ausgang:/data/output
-      - /volume1/Scan/scan-pending:/data/pending
+      - /volume1/photos/scan-eingang:/data/input
+      - /volume1/photos/scan-ausgang:/data/output
+      - /volume1/photos/scan-pending:/data/pending
     environment:
       - PROMINENCE=20
       - PADDING=0
